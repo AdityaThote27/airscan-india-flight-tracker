@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>AirScan India – Flight Tracker</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>AirScan India – Flight Tracker</h1>
+        <form method="POST">
+            <select name="route">
+                <option value="DEL-BOM">Delhi → Mumbai</option>
+                <option value="BLR-DEL">Bangalore → Delhi</option>
+                <option value="BOM-HYD">Mumbai → Hyderabad</option>
+                <option value="MAA-BLR">Chennai → Bangalore</option>
+                <option value="CCU-DEL">Kolkata → Delhi</option>
+            </select>
+            <button type="submit">Track Flights</button>
+            {% if flights %}
+            <a href="{{ url_for('download_csv') }}" class="export-btn">Download CSV</a>
+            {% endif %}
+        </form>
+
+        {% if flights %}
+        <h2>Live Flights</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Airline</th>
+                    <th>Flight No</th>
+                    <th>From</th>
+                    <th>To</th>
+                    <th>Status</th>
+                    <th>Departure</th>
+                    <th>Arrival</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for flight in flights %}
+                <tr>
+                    <td>{{ flight['airline'] }}</td>
+                    <td>{{ flight['flight_number'] }}</td>
+                    <td>{{ flight['from'] }}</td>
+                    <td>{{ flight['to'] }}</td>
+                    <td>{{ flight['status'] }}</td>
+                    <td>{{ flight['dep_time'] }}</td>
+                    <td>{{ flight['arr_time'] }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
+
+        {% if airline_stats %}
+        <!-- Airlines Distribution Chart -->
+        <div class="chart-toggle">
+            <label class="switch-label">Airlines Chart Type:</label>
+            <label class="switch">
+                <input type="checkbox" id="airlineToggle">
+                <span class="slider round"></span>
+            </label>
+            <span id="airlineLabel">Bar</span>
+        </div>
+        <div class="chart-container">
+            <canvas id="airlineChart"></canvas>
+        </div>
+
+        <!-- Status Distribution Chart -->
+        <div class="chart-toggle">
+            <label class="switch-label">Status Chart Type:</label>
+            <label class="switch">
+                <input type="checkbox" id="statusToggle">
+                <span class="slider round"></span>
+            </label>
+            <span id="statusLabel">Bar</span>
+        </div>
+        <div class="chart-container">
+            <canvas id="statusChart"></canvas>
+        </div>
+
+        <!-- Departure Time Histogram -->
+        <div class="chart-container">
+            <canvas id="depTimeChart"></canvas>
+        </div>
+
+        <script>
+            const airlineToggle = document.getElementById("airlineToggle");
+            const statusToggle = document.getElementById("statusToggle");
+            const airlineLabel = document.getElementById("airlineLabel");
+            const statusLabel = document.getElementById("statusLabel");
+
+            const airlineCtx = document.getElementById('airlineChart').getContext('2d');
+            const statusCtx = document.getElementById('statusChart').getContext('2d');
+            const depTimeCtx = document.getElementById('depTimeChart').getContext('2d');
+
+            const airlineData = {
+                labels: {{ airline_stats['labels'] | tojson }},
+                datasets: [{
+                    label: 'Flights per Airline',
+                    data: {{ airline_stats['values'] | tojson }},
+                    backgroundColor: [
+                        '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40'
+                    ],
+                    borderRadius: 8
+                }]
+            };
+
+            const statusData = {
+                labels: {{ status_stats['labels'] | tojson }},
+                datasets: [{
+                    label: 'Flight Status Count',
+                    data: {{ status_stats['values'] | tojson }},
+                    backgroundColor: [
+                        '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40'
+                    ],
+                    borderRadius: 8
+                }]
+            };
+
+            const depTimeData = {
+                labels: {{ dep_time_stats['labels'] | tojson }},
+                datasets: [{
+                    label: 'Departures by Hour',
+                    data: {{ dep_time_stats['values'] | tojson }},
+                    backgroundColor: '#ff6384',
+                    borderRadius: 6
+                }]
+            };
+
+            let airlineChart = new Chart(airlineCtx, {
+                type: 'bar',
+                data: airlineData,
+                options: {
+                    responsive: true,
+                    plugins: { title: { display: true, text: 'Flights by Airline' } },
+                    scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
+                }
+            });
+
+            let statusChart = new Chart(statusCtx, {
+                type: 'bar',
+                data: statusData,
+                options: {
+                    responsive: true,
+                    plugins: { title: { display: true, text: 'Flight Status Distribution' } },
+                    scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
+                }
+            });
+
+            new Chart(depTimeCtx, {
+                type: 'bar',
+                data: depTimeData,
+                options: {
+                    responsive: true,
+                    plugins: { title: { display: true, text: 'Departure Time by Hour' } },
+                    scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
+                }
+            });
+
+            airlineToggle.addEventListener('change', () => {
+                airlineChart.destroy();
+                const type = airlineToggle.checked ? 'pie' : 'bar';
+                airlineLabel.textContent = type.charAt(0).toUpperCase() + type.slice(1);
+                airlineChart = new Chart(airlineCtx, {
+                    type: type,
+                    data: airlineData,
+                    options: { responsive: true, plugins: { title: { display: true, text: `Flights by Airline – ${type}` } } }
+                });
+            });
+
+            statusToggle.addEventListener('change', () => {
+                statusChart.destroy();
+                const type = statusToggle.checked ? 'pie' : 'bar';
+                statusLabel.textContent = type.charAt(0).toUpperCase() + type.slice(1);
+                statusChart = new Chart(statusCtx, {
+                    type: type,
+                    data: statusData,
+                    options: { responsive: true, plugins: { title: { display: true, text: `Flight Status – ${type}` } } }
+                });
+            });
+        </script>
+        {% endif %}
+    </div>
+</body>
+</html>
